@@ -13,7 +13,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4.1")
 
 # Instantiate OpenAI client
-client = openai.OpenAI()
+#client = openai.OpenAI()
 
 SYSTEM_PROMPT = (
     "You are an expert educator and grader in mathematics, physics, and theoretical subjects. "
@@ -35,7 +35,7 @@ def call_openai(question: str, answer: str) -> Dict[str, Any]:
     prompt = f"Question:\n{question}\n\nAnswer:\n{answer}"
     print(f"Calling OpenAI for question: {question[:50]}...")  # debug
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model=MODEL_NAME,
             temperature=0.0,
             messages=[
