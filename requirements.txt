@@ -2,3 +2,4 @@ streamlit
 requests
 openai==0.28.0
 python-dotenv
+json5
