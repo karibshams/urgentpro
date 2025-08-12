@@ -1,10 +1,30 @@
 import json
 import time
 import streamlit as st
-from chatbot_setup import process_records_parallel
+from chatbot_setup import process_records_parallel, detect_language
 
 st.set_page_config(page_title="Q/A Validator", layout="wide")
 st.title("✅ JSON Question-Answer Validator & Fixer")
+
+# Language selection
+SUPPORTED_LANGUAGES = {
+    "auto": "Auto-detect from JSON",
+    "en": "English",
+    "zh": "Chinese (中文)",
+    "es": "Spanish (Español)",
+    "ar": "Arabic (العربية)",
+    "hi": "Hindi (हिन्दी)",
+    "ru": "Russian (Русский)",
+    "de": "German (Deutsch)",
+    "fr": "French (Français)"
+}
+
+selected_lang = st.selectbox(
+    "Select Language / 选择语言 / Seleccionar idioma", 
+    options=list(SUPPORTED_LANGUAGES.keys()),
+    format_func=lambda x: SUPPORTED_LANGUAGES[x],
+    index=0
+)
 
 uploaded = st.file_uploader("Upload JSON File", type="json")
 
@@ -12,6 +32,14 @@ if uploaded:
     raw_data = json.load(uploaded)
     if isinstance(raw_data, dict):
         raw_data = [raw_data]
+
+    # Detect language if auto-detect is selected
+    detected_lang = None
+    if selected_lang == "auto":
+        detected_lang = detect_language(raw_data)
+        st.info(f"Detected language: {SUPPORTED_LANGUAGES.get(detected_lang, detected_lang)}")
+    
+    target_language = detected_lang if detected_lang else selected_lang
 
     col1, col2 = st.columns(2)
     with col1:
@@ -29,7 +57,8 @@ if uploaded:
 
         for i in range(0, total, batch_size):
             batch = raw_data[i:i+batch_size]
-            batch_results = process_records_parallel(batch, max_workers=batch_size)
+            # Pass target language to processing function
+            batch_results = process_records_parallel(batch, max_workers=batch_size, target_language=target_language)
             processed.extend(batch_results)
             progress_bar.progress(min(100, int((len(processed) / total) * 100)))
             status_text.text(f"Processed {len(processed)} of {total} records...")
@@ -51,9 +80,12 @@ if uploaded:
         st.write(f"Failed to correct/flagged: {failed}")
         st.write(f"Elapsed time: {elapsed:.2f} seconds")
 
+        # Generate filename based on target language
+        filename = f"corrected_{target_language}.json"
+        
         st.download_button(
             "Download Corrected JSON",
             data=json.dumps(processed, indent=2, ensure_ascii=False),
-            file_name="corrected.json",
+            file_name=filename,
             mime="application/json"
         )
