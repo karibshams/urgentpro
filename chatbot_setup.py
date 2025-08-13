@@ -90,7 +90,7 @@ def call_openai(question: str, answer: str, question_type: str) -> Dict[str, Any
     system_prompt = get_system_prompt(question_type)
     prompt = f"Question:\n{question}\n\nAnswer:\n{answer}"
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model=MODEL_NAME,
             temperature=0.65,
             messages=[{"role":"system","content":system_prompt},{"role":"user","content":prompt}],
@@ -154,7 +154,7 @@ def gpt_translate_text(text_record: Dict[str, Any], target_language: str = "Engl
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
-            temperature=0.5,
+            temperature=0.7,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000
         )
