@@ -1,91 +1,86 @@
 import json
 import time
 import streamlit as st
-from chatbot_setup import process_records_parallel, detect_language
+from chatbot_setup import process_records_parallel, gpt_translate_text
 
 st.set_page_config(page_title="Q/A Validator", layout="wide")
-st.title("✅ JSON Question-Answer Validator & Fixer")
+st.title("JSON Question-Answer Validator & Fixer")
 
-# Language selection
-SUPPORTED_LANGUAGES = {
-    "auto": "Auto-detect from JSON",
-    "en": "English",
-    "zh": "Chinese (中文)",
-    "es": "Spanish (Español)",
-    "ar": "Arabic (العربية)",
-    "hi": "Hindi (हिन्दी)",
-    "ru": "Russian (Русский)",
-    "de": "German (Deutsch)",
-    "fr": "French (Français)"
-}
-
-selected_lang = st.selectbox(
-    "Select Language / 选择语言 / Seleccionar idioma", 
-    options=list(SUPPORTED_LANGUAGES.keys()),
-    format_func=lambda x: SUPPORTED_LANGUAGES[x],
-    index=0
-)
+# Initialize session state
+for key in ["original_data", "processed_data", "processed_en_data", "last_uploaded_file"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
 uploaded = st.file_uploader("Upload JSON File", type="json")
 
-if uploaded:
-    raw_data = json.load(uploaded)
-    if isinstance(raw_data, dict):
-        raw_data = [raw_data]
+# Only load data on NEW upload (check if it's a different file)
+if uploaded and uploaded.name != st.session_state.get("last_uploaded_file"):
+    st.session_state["original_data"] = json.load(uploaded)
+    if isinstance(st.session_state["original_data"], dict):
+        st.session_state["original_data"] = [st.session_state["original_data"]]
+    # Reset processed data only on new upload
+    st.session_state["processed_data"] = None
+    st.session_state["processed_en_data"] = None
+    st.session_state["last_uploaded_file"] = uploaded.name
 
-    # Detect language if auto-detect is selected
-    detected_lang = None
-    if selected_lang == "auto":
-        detected_lang = detect_language(raw_data)
-        st.info(f"Detected language: {SUPPORTED_LANGUAGES.get(detected_lang, detected_lang)}")
-    
-    target_language = detected_lang if detected_lang else selected_lang
+# Show original data
+if st.session_state["original_data"]:
+    st.subheader("Original Data")
+    st.json(st.session_state["original_data"])
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Original Data")
-        st.json(raw_data)
-
-    if st.button("Start Processing"):
+# Processing
+if st.button("Start Processing"):
+    # Only process if not already processed
+    if not st.session_state["processed_data"]:
         start_time = time.time()
-        total = len(raw_data)
+        total = len(st.session_state["original_data"])
         progress_bar = st.progress(0)
         status_text = st.empty()
 
         processed = []
         batch_size = 5
-
         for i in range(0, total, batch_size):
-            batch = raw_data[i:i+batch_size]
-            # Pass target language to processing function
-            batch_results = process_records_parallel(batch, max_workers=batch_size, target_language=target_language)
+            batch = st.session_state["original_data"][i:i+batch_size]
+            batch_results = process_records_parallel(batch, max_workers=batch_size)
             processed.extend(batch_results)
-            progress_bar.progress(min(100, int((len(processed) / total) * 100)))
+            progress_bar.progress(min(100, int((len(processed)/total)*100)))
             status_text.text(f"Processed {len(processed)} of {total} records...")
 
         elapsed = time.time() - start_time
+        st.session_state["processed_data"] = processed
 
-        with col2:
-            st.subheader("Processed Data")
-            st.json(processed)
+        # Translate to English
+        processed_en = [gpt_translate_text(rec, "English") for rec in processed]
+        st.session_state["processed_en_data"] = processed_en
 
-        valid = sum(1 for r in processed if r.get("_validation", {}).get("valid") is True)
-        corrected = sum(1 for r in processed if r.get("_validation", {}).get("corrected") is True)
-        failed = sum(1 for r in processed if not r.get("_validation", {}).get("valid", False) and not r.get("_validation", {}).get("corrected", False))
+# Show processed data if exists
+if st.session_state["processed_data"]:
+    st.subheader("Processed Data")
+    st.json(st.session_state["processed_data"])
 
-        st.subheader("Summary")
-        st.write(f"Total records: {total}")
-        st.write(f"Valid (no changes): {valid}")
-        st.write(f"Corrected by AI: {corrected}")
-        st.write(f"Failed to correct/flagged: {failed}")
-        st.write(f"Elapsed time: {elapsed:.2f} seconds")
+    # Summary
+    processed = st.session_state["processed_data"]
+    valid = sum(1 for r in processed if r.get("_validation", {}).get("valid") is True)
+    corrected = sum(1 for r in processed if r.get("_validation", {}).get("corrected") is True)
+    failed = sum(1 for r in processed if not r.get("_validation", {}).get("valid", False) and not r.get("_validation", {}).get("corrected", False))
+    
+    st.subheader("Summary")
+    st.write(f"Total records: {len(processed)}")
+    st.write(f"Valid (no changes): {valid}")
+    st.write(f"Corrected by AI: {corrected}")
+    st.write(f"Failed to correct/flagged: {failed}")
 
-        # Generate filename based on target language
-        filename = f"corrected_{target_language}.json"
-        
-        st.download_button(
-            "Download Corrected JSON",
-            data=json.dumps(processed, indent=2, ensure_ascii=False),
-            file_name=filename,
-            mime="application/json"
-        )
+    # Download buttons (outside processing button)
+    st.download_button(
+        "Download Corrected JSON (Original Language)",
+        data=json.dumps(st.session_state["processed_data"], indent=2, ensure_ascii=False),
+        file_name="corrected.json",
+        mime="application/json"
+    )
+
+    st.download_button(
+        "Download Corrected JSON (English)",
+        data=json.dumps(st.session_state["processed_en_data"], indent=2, ensure_ascii=False),
+        file_name="corrected_en.json",
+        mime="application/json"
+    )
