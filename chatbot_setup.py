@@ -12,7 +12,7 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4.1")
 
-client = openai.OpenAI()
+#client = openai.OpenAI()
 
 # Key maps for supported languages
 KEY_MAPS = {
@@ -152,7 +152,7 @@ def gpt_translate_text(text_record: Dict[str, Any], target_language: str = "Engl
     )
 
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model=MODEL_NAME,
             temperature=0.7,
             messages=[{"role": "user", "content": prompt}],
